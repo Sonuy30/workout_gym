@@ -1,19 +1,31 @@
-import mongoose from 'mongoose';
+import { MongoClient, Db } from "mongodb";
 
-export async function connect() {
-    try {
-        mongoose.connect(process.env.MONGO_URI!);
-        const connection = mongoose.connection;
-        connection.once('connected', () => {
-            console.log('MongoDB connected');
-        })
-        connection.on('error, (error) => {
-            console.log('MongoDB connection error.please make sure that MongoDB is running' + error);
-            process.exit();
-        })
-        
-    } catch (error) {
-        console.log('Error connecting to database: ', error);
-        console.log('error');
-    }
+const uri: string | undefined = process.env.MONGODB_URI; // MongoDB connection string
+const options = {};
+
+if (!uri) {
+  throw new Error("Please add your MongoDB URI to .env.local");
 }
+
+let client: MongoClient;
+let clientPromise: Promise<MongoClient>;
+
+if (process.env.NODE_ENV === "development") {
+  // In development, use a global variable to preserve the client across hot reloads
+  if (!(global as any)._mongoClientPromise) {
+    client = new MongoClient(uri, options);
+    (global as any)._mongoClientPromise = client.connect();
+  }
+  clientPromise = (global as any)._mongoClientPromise;
+} else {
+  // In production, always create a new connection
+  client = new MongoClient(uri, options);
+  clientPromise = client.connect();
+}
+
+export async function getDatabase(dbName: string): Promise<Db> {
+  const client = await clientPromise;
+  return client.db(dbName);
+}
+
+export default clientPromise;
